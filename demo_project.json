@@ -2,6 +2,24 @@
   "transcript_text": " Look, if you're suffering from neuropathy, I need to ask you three quick questions. I need you to answer them honestly. Because what I'm about to reveal could explain why nothing you've tried has ever worked. Question 1. Is your pain worse at night when you lie down?",
   "preserve_audio": true,
   "highlight_assignments": [
+    {
+      "phrase": "suffering from neuropathy",
+      "clip_path": "clips/a.mp4",
+      "music_path": null,
+      "music_volume": 1.0
+    },
+    {
+      "phrase": "I need to ask you three quick questions",
+      "clip_path": "clips/a.mp4",
+      "music_path": null,
+      "music_volume": 1.0
+    },
+    {
+      "phrase": "Is your pain worse at night when you lie down?",
+      "clip_path": "clips/123.mp4",
+      "music_path": null,
+      "music_volume": 1.0
+    }
   ],
   "subtitle_sentences": [
     {
@@ -36,9 +54,10 @@
   "subtitle_design": {
     "bar_color": [0, 0, 0],
     "bar_opacity": 0.75,
-    "text_color": [255, 255, 2455],
+    "text_color": [255, 255, 255],
     "highlight_color": [255, 230, 90]
-  }
+  },
+  "global_music_path":"audio_files/aw.mp3"
 }
 
 

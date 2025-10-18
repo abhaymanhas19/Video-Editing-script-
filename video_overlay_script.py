@@ -105,6 +105,8 @@ class ProjectConfig:
     whisper_model: str = "base"
     highlight_assignments: List[HighlightAssignment] = field(default_factory=list)
     preserve_audio: bool = True
+    global_music_path: Optional[str] = None  # Optional background music for the entire video
+    global_music_volume: float = 1.0  # Gain applied to the global music track
     subtitle_design: SubtitleDesign = field(default_factory=SubtitleDesign)
     subtitle_segments: Optional[List[Tuple[int, int]]] = None
     subtitle_sentences: List[SubtitleSentence] = field(default_factory=list)
@@ -903,19 +905,6 @@ def draw_subtitle_on_frame(
                 if pil_image is None:
                     pil_image = Image.fromarray(cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB))
                     pil_draw = ImageDraw.Draw(pil_image)
-                shadow_dx, shadow_dy = design.shadow_offset
-                if design.shadow_thickness > 0:
-                    shadow_rgb = (
-                        int(design.shadow_color[2]),
-                        int(design.shadow_color[1]),
-                        int(design.shadow_color[0]),
-                    )
-                    pil_draw.text(
-                        (x_cursor + shadow_dx, baseline_y - line_ascent + shadow_dy),
-                        word,
-                        font=pil_font,
-                        fill=shadow_rgb,
-                    )
                 rgb_color = (
                     int(text_color[2]),
                     int(text_color[1]),
@@ -928,19 +917,6 @@ def draw_subtitle_on_frame(
                     fill=rgb_color,
                 )
             else:
-                if design.shadow_thickness > 0:
-                    shadow_dx, shadow_dy = design.shadow_offset
-                    cv2.putText(
-                        annotated,
-                        word,
-                        (x_cursor + shadow_dx, baseline_y + shadow_dy),
-                        design.font,
-                        design.text_scale,
-                        design.shadow_color,
-                        thickness=design.shadow_thickness,
-                        lineType=cv2.LINE_AA,
-                    )
-
                 if design.outline_thickness > 0:
                     cv2.putText(
                         annotated,
@@ -1252,8 +1228,11 @@ def merge_audio_tracks(
     transcript: List[Dict[str, float]],
     highlight_segments: List[Dict[str, Optional[object]]],
     final_output_path: str,
+    preserve_main_audio: bool = True,
+    global_music_path: Optional[str] = None,
+    global_music_volume: float = 1.0,
 ) -> None:
-    """Attach the original audio and optional music layers using MoviePy."""
+    """Attach the original audio, per-segment music, and optional global music using MoviePy."""
 
     if not HAVE_MOVIEPY:
         print("[warn] MoviePy is not installed. Output video will be silent.")
@@ -1261,22 +1240,51 @@ def merge_audio_tracks(
 
     processed_clip = mpy.VideoFileClip(silent_video_path)
     main_clip = mpy.VideoFileClip(main_video_path, audio=True)
-    base_audio = safe_audio_subclip(main_clip.audio, 0, processed_clip.duration)
 
+    base_audio: Optional[mpy.AudioClip] = None
     external_audio_clip: Optional[mpy.AudioFileClip] = None
-    if base_audio is None:
-        try:
-            external_audio_clip = mpy.AudioFileClip(main_video_path)
-            base_audio = safe_audio_subclip(
-                external_audio_clip, 0, processed_clip.duration
-            )
-        except Exception as exc:  # noqa: BLE001
-            print(f"[warn] Unable to load audio track from main video ({exc}).")
-            base_audio = None
+    if preserve_main_audio:
+        base_audio = safe_audio_subclip(main_clip.audio, 0, processed_clip.duration)
+
+        if base_audio is None:
+            try:
+                external_audio_clip = mpy.AudioFileClip(main_video_path)
+                base_audio = safe_audio_subclip(
+                    external_audio_clip, 0, processed_clip.duration
+                )
+            except Exception as exc:  # noqa: BLE001
+                print(f"[warn] Unable to load audio track from main video ({exc}).")
+                base_audio = None
 
     audio_layers: List[mpy.AudioClip] = []
     if base_audio is not None:
         audio_layers.append(base_audio)
+
+    if global_music_path:
+        if not os.path.exists(global_music_path):
+            raise FileNotFoundError(f"Global music file not found: {global_music_path}")
+        global_music_clip = mpy.AudioFileClip(global_music_path)
+        if global_music_clip.duration < processed_clip.duration:
+            loops = math.ceil(processed_clip.duration / global_music_clip.duration)
+            global_music_clip = mpy.concatenate_audioclips(
+                [global_music_clip] * max(1, loops)
+            )
+        global_music_clip = safe_audio_subclip(
+            global_music_clip, 0, processed_clip.duration
+        )
+        if global_music_clip is not None:
+            volume = float(global_music_volume)
+            if hasattr(global_music_clip, "volumex"):
+                global_music_clip = global_music_clip.volumex(volume)
+            elif hasattr(global_music_clip, "fx"):
+                from moviepy.audio.fx import volumex as volumex_fx
+
+                global_music_clip = volumex_fx(global_music_clip, volume)
+            if hasattr(global_music_clip, "set_start"):
+                global_music_clip = global_music_clip.set_start(0)
+            elif hasattr(global_music_clip, "with_start"):
+                global_music_clip = global_music_clip.with_start(0)
+            audio_layers.append(global_music_clip)
     for segment in highlight_segments:
         music_path = segment.get("music_path")
         if not music_path:
@@ -1350,7 +1358,12 @@ def render_project(config: ProjectConfig) -> Dict[str, object]:
         transcript, config.highlight_assignments
     )
 
-    needs_audio_merge = config.preserve_audio and HAVE_MOVIEPY
+    any_segment_music = any(
+        assignment.music_path for assignment in config.highlight_assignments
+    )
+    needs_audio_merge = HAVE_MOVIEPY and (
+        config.preserve_audio or bool(config.global_music_path) or any_segment_music
+    )
     final_output_path = config.output_path
     silent_output_path = final_output_path
 
@@ -1392,6 +1405,9 @@ def render_project(config: ProjectConfig) -> Dict[str, object]:
             transcript,
             highlight_segments,
             final_output_path,
+            preserve_main_audio=config.preserve_audio,
+            global_music_path=config.global_music_path,
+            global_music_volume=config.global_music_volume,
         )
         if (
             os.path.exists(silent_output_path)
@@ -1481,6 +1497,11 @@ def load_project_config_from_json(
 
     if "preserve_audio" in data:
         base_config.preserve_audio = bool(data["preserve_audio"])
+
+    if "global_music_path" in data:
+        base_config.global_music_path = data["global_music_path"]
+    if "global_music_volume" in data:
+        base_config.global_music_volume = float(data["global_music_volume"])
 
     if "subtitle_segments" in data:
         base_config.subtitle_segments = [
