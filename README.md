@@ -4,9 +4,9 @@
 
 ### To only generate the transcribe text(.txt) and subtitle (.json) file and adding the subtitle into the video
 
-### `python filename.py --main-video filename.mp4`
+### ```python filename.py --main-video filename.mp4```
 
 
 ### To add clips to specific phrases and specify rules for writing subtitles
 
-#### `python filename.py --main-video filename.mp4 --config config.json`
+#### ```python filename.py --main-video filename.mp4 --config config.json```
