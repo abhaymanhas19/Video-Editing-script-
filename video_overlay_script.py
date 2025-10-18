@@ -988,52 +988,45 @@ def process_video_with_overlays(
         source_width, source_height, target_aspect_ratio
     )
 
-    overlay_caps: List[Optional[cv2.VideoCapture]] = []
-    overlay_frame_counts: List[int] = []
-    overlay_fps_values: List[float] = []
-    overlay_positions: List[int] = []
-    overlay_finished: List[bool] = []
-    overlay_last_frames: List[Optional[np.ndarray]] = []
+    segment_clip_paths: List[Optional[str]] = []
     clip_state: Dict[str, Dict[str, object]] = {}
 
     for segment in highlight_segments:
         clip_path = segment.get("clip_path")
+        segment_clip_paths.append(clip_path if clip_path else None)
         if not clip_path:
-            overlay_caps.append(None)
-            overlay_frame_counts.append(0)
-            overlay_fps_values.append(fps)
-            overlay_positions.append(-1)
-            overlay_finished.append(True)
-            overlay_last_frames.append(None)
+            continue
+        if clip_path in clip_state:
             continue
         if not os.path.exists(clip_path):
             raise FileNotFoundError(f"Overlay clip not found: {clip_path}")
         overlay_capture = cv2.VideoCapture(clip_path)
         if not overlay_capture.isOpened():
             raise IOError(f"Cannot open overlay clip: {clip_path}")
-        overlay_caps.append(overlay_capture)
-        overlay_frame_counts.append(
-            int(overlay_capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-        )
-        overlay_fps_values.append(
-            overlay_capture.get(cv2.CAP_PROP_FPS) or fps
-        )
-        overlay_positions.append(-1)
-        overlay_finished.append(False)
-        overlay_last_frames.append(None)
-        if clip_path not in clip_state:
-            clip_state[clip_path] = {
-                "next_frame": 0,
-                "fps": overlay_fps_values[-1],
-                "total_frames": overlay_frame_counts[-1],
-            }
+        total_frames = int(overlay_capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        clip_state[clip_path] = {
+            "capture": overlay_capture,
+            "total_frames": total_frames,
+            "fps": overlay_capture.get(cv2.CAP_PROP_FPS) or fps,
+            "next_frame": 0,
+            "current_segment_index": None,
+            "current_subtitle_index": None,
+            "last_segment_index": None,
+            "last_subtitle_index": None,
+            "continuation_pending": False,
+            "needs_seek": True,
+            "seek_frame": 0,
+            "frames_to_drop": 0,
+            "finished": total_frames <= 0,
+        }
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
     if not writer.isOpened():
         raise IOError(f"Cannot create output file: {output_path}")
 
-    highlight_frame_ranges: List[Tuple[int, int, int]] = []
+    highlight_frame_ranges: List[List[int]] = []
+    highlight_subtitle_indices: List[Optional[int]] = []
     for idx, segment in enumerate(highlight_segments):
         start_word = int(segment["start_word"])
         end_word = int(segment["end_word"])
@@ -1041,7 +1034,49 @@ def process_video_with_overlays(
         end_time = transcript[end_word]["end_time"]
         start_frame = int(start_time * fps)
         end_frame = int(end_time * fps)
-        highlight_frame_ranges.append((start_frame, end_frame, idx))
+        highlight_frame_ranges.append([start_frame, end_frame, idx])
+        subtitle_index: Optional[int] = None
+        if subtitle_segments:
+            for sub_idx, (sub_start, sub_end) in enumerate(subtitle_segments):
+                if sub_end < start_word:
+                    continue
+                if sub_start > end_word:
+                    break
+                subtitle_index = sub_idx
+                break
+        highlight_subtitle_indices.append(subtitle_index)
+
+    for idx in range(1, len(highlight_frame_ranges)):
+        prev_range = highlight_frame_ranges[idx - 1]
+        curr_range = highlight_frame_ranges[idx]
+        prev_idx = prev_range[2]
+        curr_idx = curr_range[2]
+        prev_clip = segment_clip_paths[prev_idx]
+        curr_clip = segment_clip_paths[curr_idx]
+        consecutive_subtitles = False
+        if subtitle_segments:
+            prev_sub_idx = highlight_subtitle_indices[prev_idx]
+            curr_sub_idx = highlight_subtitle_indices[curr_idx]
+            consecutive_subtitles = (
+                prev_sub_idx is not None
+                and curr_sub_idx is not None
+                and curr_sub_idx == prev_sub_idx + 1
+            )
+        else:
+            consecutive_subtitles = curr_range[0] <= prev_range[1] + 1
+
+        if prev_clip and curr_clip and prev_clip == curr_clip and consecutive_subtitles:
+            curr_start = curr_range[0]
+            prev_start = prev_range[0]
+            prev_end = prev_range[1]
+
+            if curr_start > prev_end + 1:
+                prev_range[1] = curr_start - 1
+            else:
+                prev_range[1] = max(prev_start, min(prev_end, curr_start - 1))
+
+            adjusted_curr_start = max(curr_start, prev_range[1] + 1)
+            curr_range[0] = min(adjusted_curr_start, curr_range[1])
 
     frame_index = 0
     highlight_ranges_for_words = [
@@ -1063,66 +1098,124 @@ def process_video_with_overlays(
                 break
 
         if active_overlay_index is not None:
-            overlay_cap = overlay_caps[active_overlay_index]
-            if (
-                overlay_cap is not None
-                and not overlay_finished[active_overlay_index]
-            ):
-                clip_path = highlight_segments[active_overlay_index].get("clip_path")
-                clip_info = clip_state.get(clip_path or "")
+            clip_path = segment_clip_paths[active_overlay_index]
+            if clip_path:
+                clip_info = clip_state.get(clip_path)
                 if clip_info is not None:
-                    overlay_frame_index = clip_info["next_frame"]
-                    overlay_total_frames = clip_info["total_frames"]
-                else:
-                    overlay_total_frames = overlay_frame_counts[active_overlay_index]
-                    clip_info = {
-                        "next_frame": overlay_positions[active_overlay_index] + 1,
-                        "total_frames": overlay_total_frames,
-                        "fps": overlay_fps_values[active_overlay_index],
-                    }
-                    clip_state[clip_path or ""] = clip_info
-                    overlay_frame_index = clip_info["next_frame"]
-
-                if overlay_total_frames <= 0 or overlay_frame_index >= overlay_total_frames:
-                    overlay_finished[active_overlay_index] = True
-                    if clip_info is not None:
-                        clip_info["next_frame"] = overlay_total_frames
-                else:
-                    frame_to_use = None
-                    if overlay_frame_index != overlay_positions[active_overlay_index]:
-                        overlay_cap.set(cv2.CAP_PROP_POS_FRAMES, overlay_frame_index)
-                        ret_o, overlay_frame = overlay_cap.read()
-                        if not ret_o:
-                            overlay_finished[active_overlay_index] = True
-                            overlay_last_frames[active_overlay_index] = None
+                    current_subtitle_index = highlight_subtitle_indices[
+                        active_overlay_index
+                    ]
+                    current_segment_index = clip_info.get("current_segment_index")
+                    if current_segment_index != active_overlay_index:
+                        if current_segment_index is not None:
+                            clip_info["last_segment_index"] = current_segment_index
+                        if clip_info.get("current_subtitle_index") is not None:
+                            clip_info["last_subtitle_index"] = clip_info[
+                                "current_subtitle_index"
+                            ]
+                        prev_segment_index = clip_info.get("last_segment_index")
+                        prev_subtitle_index = clip_info.get("last_subtitle_index")
+                        if subtitle_segments:
+                            should_continue = (
+                                prev_subtitle_index is not None
+                                and current_subtitle_index is not None
+                                and current_subtitle_index == prev_subtitle_index + 1
+                            )
                         else:
-                            overlay_positions[active_overlay_index] = overlay_frame_index
-                            overlay_last_frames[active_overlay_index] = overlay_frame
-                            frame_to_use = overlay_frame
-                            if clip_info is not None:
-                                clip_info["next_frame"] = overlay_frame_index + 1
+                            should_continue = (
+                                prev_segment_index is not None
+                                and active_overlay_index == prev_segment_index + 1
+                            )
+                        if not should_continue:
+                            clip_info["next_frame"] = 0
+                            clip_info["seek_frame"] = 0
+                            clip_info["needs_seek"] = True
+                            clip_info["continuation_pending"] = False
+                            clip_info["frames_to_drop"] = 0
+                        else:
+                            target_next = max(int(clip_info.get("next_frame", 0)), 0)
+                            clip_info["seek_frame"] = target_next
+                            clip_info["needs_seek"] = True
+                            clip_info["continuation_pending"] = True
+                            clip_info["frames_to_drop"] = 0
+                        clip_info["finished"] = clip_info["total_frames"] <= 0
+                        clip_info["current_segment_index"] = active_overlay_index
+                        clip_info["current_subtitle_index"] = current_subtitle_index
                     else:
-                        frame_to_use = overlay_last_frames[active_overlay_index]
-                        if frame_to_use is not None and clip_info is not None:
-                            clip_info["next_frame"] = overlay_frame_index + 1
+                        clip_info["current_subtitle_index"] = current_subtitle_index
 
-                    if frame_to_use is not None:
-                        overlay_frame = crop_to_aspect_ratio(
-                            frame_to_use, target_ratio=target_aspect_ratio
-                        )
-                        overlay_frame = resize_overlay_for_canvas(
-                            overlay_frame,
-                            canvas_width=width,
-                            canvas_height=height,
-                            aspect_ratio=target_aspect_ratio,
-                        )
-                        overlay_h, overlay_w = overlay_frame.shape[:2]
-                        x_start = (width - overlay_w) // 2
-                        y_start = (height - overlay_h) // 2
-                        frame[
-                            y_start : y_start + overlay_h,
-                            x_start : x_start + overlay_w,
-                        ] = overlay_frame
+                    overlay_total_frames = clip_info["total_frames"]
+                    current_index = int(clip_info.get("next_frame", 0))
+                    can_render = (
+                        overlay_total_frames > 0
+                        and current_index < overlay_total_frames
+                    )
+                    if not can_render:
+                        clip_info["finished"] = True
+                        clip_info["next_frame"] = overlay_total_frames
+                    else:
+                        overlay_cap = clip_info["capture"]
+                        if clip_info.get("needs_seek", False):
+                            seek_frame = int(
+                                clip_info.get("seek_frame", current_index)
+                            )
+                            seek_frame = max(
+                                0, min(seek_frame, overlay_total_frames - 1)
+                            )
+                            overlay_cap.set(cv2.CAP_PROP_POS_FRAMES, seek_frame)
+                            clip_info["needs_seek"] = False
+                            current_index = seek_frame
+                            clip_info["next_frame"] = current_index
+
+                        drop_count = int(clip_info.get("frames_to_drop", 0) or 0)
+                        while (
+                            drop_count > 0
+                            and current_index < overlay_total_frames
+                            and not clip_info.get("finished", False)
+                        ):
+                            ret_drop, _ = overlay_cap.read()
+                            if not ret_drop:
+                                clip_info["finished"] = True
+                                clip_info["next_frame"] = overlay_total_frames
+                                break
+                            current_index += 1
+                            drop_count -= 1
+                        clip_info["frames_to_drop"] = drop_count
+                        clip_info["next_frame"] = current_index
+
+                        if clip_info.get("finished", False):
+                            pass
+                        elif current_index >= overlay_total_frames:
+                            clip_info["finished"] = True
+                            clip_info["next_frame"] = overlay_total_frames
+                        else:
+                            ret_o, overlay_frame = overlay_cap.read()
+                            if not ret_o:
+                                clip_info["finished"] = True
+                                clip_info["next_frame"] = overlay_total_frames
+                            else:
+                                current_index += 1
+                                clip_info["next_frame"] = current_index
+                                clip_info["continuation_pending"] = False
+                                clip_info["finished"] = (
+                                    current_index >= overlay_total_frames
+                                )
+                                overlay_frame = crop_to_aspect_ratio(
+                                    overlay_frame, target_ratio=target_aspect_ratio
+                                )
+                                overlay_frame = resize_overlay_for_canvas(
+                                    overlay_frame,
+                                    canvas_width=width,
+                                    canvas_height=height,
+                                    aspect_ratio=target_aspect_ratio,
+                                )
+                                overlay_h, overlay_w = overlay_frame.shape[:2]
+                                x_start = (width - overlay_w) // 2
+                                y_start = (height - overlay_h) // 2
+                                frame[
+                                    y_start : y_start + overlay_h,
+                                    x_start : x_start + overlay_w,
+                                ] = overlay_frame
 
         frame_with_subtitles = draw_subtitle_on_frame(
             frame,
@@ -1137,7 +1230,8 @@ def process_video_with_overlays(
         frame_index += 1
 
     cap.release()
-    for overlay_cap in overlay_caps:
+    for clip_info in clip_state.values():
+        overlay_cap = clip_info.get("capture")
         if overlay_cap is not None:
             overlay_cap.release()
     writer.release()
