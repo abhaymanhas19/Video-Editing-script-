@@ -586,12 +586,21 @@ def draw_subtitle_on_frame(
 
     active_segment_index: Optional[int] = None
     if subtitle_segments:
+        previous_candidate: Optional[int] = None
         for idx, (seg_start, seg_end) in enumerate(subtitle_segments):
             start_t = transcript[seg_start]["start_time"]
             end_t = transcript[seg_end]["end_time"]
             if start_t <= current_time <= end_t:
                 active_segment_index = idx
                 break
+            if current_time < start_t:
+                if previous_candidate is not None:
+                    active_segment_index = previous_candidate
+                break
+            previous_candidate = idx
+        else:
+            if previous_candidate is not None:
+                active_segment_index = previous_candidate
 
     words_to_display: List[Tuple[int, str]] = []
     if active_segment_index is not None and subtitle_segments:
