@@ -1,0 +1,242 @@
+[
+    {
+        "word": "Look,",
+        "start_time": 0.0,
+        "end_time": 0.34
+    },
+    {
+        "word": "if",
+        "start_time": 0.6,
+        "end_time": 0.76
+    },
+    {
+        "word": "you're",
+        "start_time": 0.76,
+        "end_time": 0.92
+    },
+    {
+        "word": "suffering",
+        "start_time": 0.92,
+        "end_time": 1.3
+    },
+    {
+        "word": "from",
+        "start_time": 1.3,
+        "end_time": 1.58
+    },
+    {
+        "word": "neuropathy,",
+        "start_time": 1.58,
+        "end_time": 2.2
+    },
+    {
+        "word": "I",
+        "start_time": 2.7,
+        "end_time": 2.78
+    },
+    {
+        "word": "need",
+        "start_time": 2.78,
+        "end_time": 2.92
+    },
+    {
+        "word": "to",
+        "start_time": 2.92,
+        "end_time": 3.1
+    },
+    {
+        "word": "ask",
+        "start_time": 3.1,
+        "end_time": 3.36
+    },
+    {
+        "word": "you",
+        "start_time": 3.36,
+        "end_time": 3.48
+    },
+    {
+        "word": "three",
+        "start_time": 3.48,
+        "end_time": 3.74
+    },
+    {
+        "word": "quick",
+        "start_time": 3.74,
+        "end_time": 4.02
+    },
+    {
+        "word": "questions.",
+        "start_time": 4.02,
+        "end_time": 4.56
+    },
+    {
+        "word": "I",
+        "start_time": 5.18,
+        "end_time": 5.34
+    },
+    {
+        "word": "need",
+        "start_time": 5.34,
+        "end_time": 5.54
+    },
+    {
+        "word": "you",
+        "start_time": 5.54,
+        "end_time": 5.72
+    },
+    {
+        "word": "to",
+        "start_time": 5.72,
+        "end_time": 5.86
+    },
+    {
+        "word": "answer",
+        "start_time": 5.86,
+        "end_time": 6.18
+    },
+    {
+        "word": "them",
+        "start_time": 6.18,
+        "end_time": 6.44
+    },
+    {
+        "word": "honestly.",
+        "start_time": 6.44,
+        "end_time": 6.98
+    },
+    {
+        "word": "Because",
+        "start_time": 7.58,
+        "end_time": 7.86
+    },
+    {
+        "word": "what",
+        "start_time": 7.86,
+        "end_time": 8.08
+    },
+    {
+        "word": "I'm",
+        "start_time": 8.08,
+        "end_time": 8.32
+    },
+    {
+        "word": "about",
+        "start_time": 8.32,
+        "end_time": 8.52
+    },
+    {
+        "word": "to",
+        "start_time": 8.52,
+        "end_time": 8.74
+    },
+    {
+        "word": "reveal",
+        "start_time": 8.74,
+        "end_time": 9.04
+    },
+    {
+        "word": "could",
+        "start_time": 9.04,
+        "end_time": 9.36
+    },
+    {
+        "word": "explain",
+        "start_time": 9.36,
+        "end_time": 9.8
+    },
+    {
+        "word": "why",
+        "start_time": 9.8,
+        "end_time": 10.06
+    },
+    {
+        "word": "nothing",
+        "start_time": 10.06,
+        "end_time": 10.4
+    },
+    {
+        "word": "you've",
+        "start_time": 10.4,
+        "end_time": 10.72
+    },
+    {
+        "word": "tried",
+        "start_time": 10.72,
+        "end_time": 11.0
+    },
+    {
+        "word": "has",
+        "start_time": 11.0,
+        "end_time": 11.24
+    },
+    {
+        "word": "ever",
+        "start_time": 11.24,
+        "end_time": 11.52
+    },
+    {
+        "word": "worked.",
+        "start_time": 11.52,
+        "end_time": 11.98
+    },
+    {
+        "word": "Question",
+        "start_time": 12.54,
+        "end_time": 13.02
+    },
+    {
+        "word": "1.",
+        "start_time": 13.02,
+        "end_time": 13.34
+    },
+    {
+        "word": "Is",
+        "start_time": 13.84,
+        "end_time": 13.98
+    },
+    {
+        "word": "your",
+        "start_time": 13.98,
+        "end_time": 14.16
+    },
+    {
+        "word": "pain",
+        "start_time": 14.16,
+        "end_time": 14.48
+    },
+    {
+        "word": "worse",
+        "start_time": 14.48,
+        "end_time": 14.9
+    },
+    {
+        "word": "at",
+        "start_time": 14.9,
+        "end_time": 15.18
+    },
+    {
+        "word": "night",
+        "start_time": 15.18,
+        "end_time": 15.44
+    },
+    {
+        "word": "when",
+        "start_time": 15.44,
+        "end_time": 15.74
+    },
+    {
+        "word": "you",
+        "start_time": 15.74,
+        "end_time": 15.9
+    },
+    {
+        "word": "lie",
+        "start_time": 15.9,
+        "end_time": 16.06
+    },
+    {
+        "word": "down?",
+        "start_time": 16.06,
+        "end_time": 16.42
+    }
+]
